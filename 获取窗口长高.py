@@ -3,7 +3,6 @@ import time
 import psutil
 import win32gui
 import win32process
-import ctypes
 
 # -------------------------------
 # 启动 scrcpy
@@ -49,49 +48,24 @@ if not hwnds:
 hwnd = hwnds[0]  # 取第一个窗口句柄
 
 # -------------------------------
-# 设置 DPI 感知（确保物理像素正确）
+# 获取客户区尺寸
 # -------------------------------
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-monitor DPI aware
-except Exception:
-    pass
-
-# -------------------------------
-# 获取窗口多种尺寸
-# -------------------------------
-def get_window_sizes(hwnd):
-    # 客户区大小
+def get_client_size(hwnd):
     left, top, right, bottom = win32gui.GetClientRect(hwnd)
-    client_width = right - left
-    client_height = bottom - top
-
-    # 窗口外框大小（含边框、标题栏）
-    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-    window_width = right - left
-    window_height = bottom - top
-
-    # 物理像素
-    try:
-        dpi = ctypes.windll.shcore.GetDpiForWindow(hwnd)
-    except Exception:
-        dpi = 96
-    physical_width = int(window_width * dpi / 96)
-    physical_height = int(window_height * dpi / 96)
-
-    return (client_width, client_height), (window_width, window_height), (physical_width, physical_height)
+    width = right - left
+    height = bottom - top
+    return width, height
 
 # -------------------------------
-# 监听窗口大小变化
+# 监听客户区大小变化
 # -------------------------------
-last_sizes = None
-print("开始监听 scrcpy 窗口大小（拖动窗口试试）")
+last_size = None
+print("开始监听 scrcpy 窗口内部区域大小（拖动窗口试试）")
 while win32gui.IsWindow(hwnd):
-    client_size, window_size, physical_size = get_window_sizes(hwnd)
-    if (client_size, window_size, physical_size) != last_sizes:
-        print(f"客户区: {client_size[0]}x{client_size[1]} px | "
-              f"窗口外框: {window_size[0]}x{window_size[1]} px | "
-              f"物理像素: {physical_size[0]}x{physical_size[1]} px")
-        last_sizes = (client_size, window_size, physical_size)
+    size = get_client_size(hwnd)
+    if size != last_size:
+        print(f"客户区: {size[0]}x{size[1]} px")
+        last_size = size
     time.sleep(0.1)
 
 print("scrcpy 窗口已关闭")

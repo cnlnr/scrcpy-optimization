@@ -1,3 +1,4 @@
+import re
 import subprocess
 
 # 修改屏幕分辨率
@@ -10,13 +11,20 @@ def reset():
     # 使用 adb 重置屏幕分辨率
     subprocess.run("adb shell wm size reset", shell=True)
 
+def size():
+    resolution = subprocess.check_output("adb shell wm size", shell=True, encoding='utf-8').splitlines()[1].removeprefix("Physical size: ").split("x")
+    return resolution
+
+
 
 if __name__ == "__main__":
     w,h = 1080,1920
+
+    print("当前设备分辨率：",size())
     print(f"更改为 {w}x{h}")
     wm_size(w,h)
 
     import time
-    print("等待 5 秒后恢复")
-    time.sleep(5)
+    print("等待 3 秒后恢复")
+    time.sleep(3)
     reset()
