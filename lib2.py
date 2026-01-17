@@ -3,13 +3,20 @@ import time
 import psutil
 import win32gui
 import win32process
-
+import ctypes
 
 SCRCPY_VBS = "scrcpy-noconsole.vbs"
 SCRCPY_PROCESS_KEYWORD = "scrcpy"
 
+ctypes.windll.shcore.SetProcessDpiAwareness(2)
 
+# ----------------------------
+# 1. 启动 scrcpy
+# ----------------------------
 def start_scrcpy_vbs():
+    """
+    通过 VBS 启动 scrcpy，无控制台
+    """
     subprocess.Popen(
         SCRCPY_VBS,
         shell=True,
@@ -18,6 +25,9 @@ def start_scrcpy_vbs():
     )
 
 
+# ----------------------------
+# 2. 查找 scrcpy.exe PID
+# ----------------------------
 def find_scrcpy_pid(timeout=5):
     start = time.time()
     while time.time() - start < timeout:
@@ -29,6 +39,9 @@ def find_scrcpy_pid(timeout=5):
     return None
 
 
+# ----------------------------
+# 3. 按 PID 查找顶层窗口
+# ----------------------------
 def find_window_by_pid(pid):
     hwnds = []
 
@@ -43,10 +56,12 @@ def find_window_by_pid(pid):
     return hwnds
 
 
+# ----------------------------
+# 4. 确定渲染窗口
+# ----------------------------
 def find_render_window(hwnd):
     """
-    尝试找渲染子窗口；
-    如果没有子窗口，直接返回顶层窗口
+    尝试找渲染子窗口，如果没有子窗口，返回顶层窗口
     """
     children = []
 
@@ -65,29 +80,65 @@ def find_render_window(hwnd):
         children.sort(reverse=True)
         return children[0][1]
 
-    # ⭐ 关键修正点：没有子窗口 → 顶层窗口本身就是渲染窗口
-    return hwnd
+    return hwnd  # 没有子窗口，顶层窗口即渲染窗口
 
 
-def get_client_size(hwnd):
+# ----------------------------
+# 5. 获取窗口尺寸
+# ----------------------------
+def get_sizes(hwnd):
+    """
+    获取窗口多种尺寸信息
+    - 客户区大小（内容区）
+    - 窗口外框大小（含边框和标题栏）
+    - 物理像素大小（考虑 DPI 缩放）
+    """
+    # 客户区大小
     left, top, right, bottom = win32gui.GetClientRect(hwnd)
-    return right - left, bottom - top
+    client_width = right - left
+    client_height = bottom - top
+
+    # 窗口外框大小（含边框、标题栏）
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    window_width = right - left
+    window_height = bottom - top
+
+    # 获取窗口 DPI（Windows 10+）
+    try:
+        dpi = ctypes.windll.shcore.GetDpiForWindow(hwnd)
+    except Exception:
+        dpi = 96  # 默认标准 DPI
+
+    physical_width = int(window_width * dpi / 96)
+    physical_height = int(window_height * dpi / 96)
+
+    return (client_width, client_height), (window_width, window_height), (physical_width, physical_height)
 
 
+# ----------------------------
+# 6. 监听窗口大小变化
+# ----------------------------
 def monitor_size(hwnd):
-    last = None
+    last_sizes = None
     print("开始监听 scrcpy 窗口大小（拖动窗口试试）")
 
     while win32gui.IsWindow(hwnd):
-        size = get_client_size(hwnd)
-        if size != last:
-            print(f"scrcpy 渲染区大小变化: {size[0]} x {size[1]}")
-            last = size
+        client_size, window_size, physical_size = get_sizes(hwnd)
+
+        if (client_size, window_size, physical_size) != last_sizes:
+            print(f"客户区大小: {client_size[0]} x {client_size[1]} px | "
+                  f"窗口外框大小: {window_size[0]} x {window_size[1]} px | "
+                  f"物理像素: {physical_size[0]} x {physical_size[1]} px")
+            last_sizes = (client_size, window_size, physical_size)
+
         time.sleep(0.05)
 
     print("scrcpy 已关闭")
 
 
+# ----------------------------
+# 主流程
+# ----------------------------
 def main():
     print("启动 scrcpy-noconsole.vbs …")
     start_scrcpy_vbs()
