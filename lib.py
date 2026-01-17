@@ -12,7 +12,7 @@ def reset():
     subprocess.run("adb shell wm size reset", shell=True)
 
 def size():
-    resolution = subprocess.check_output("adb shell wm size", shell=True, encoding='utf-8').splitlines()[1].removeprefix("Physical size: ").split("x")
+    resolution = subprocess.check_output("adb shell wm size", shell=True, encoding='utf-8').splitlines()[0].removeprefix("Physical size: ").split("x")
     return resolution
 
 
@@ -20,7 +20,7 @@ def size():
 if __name__ == "__main__":
     w,h = 1080,1920
 
-    print("当前设备分辨率：",size())
+    print("设备分辨率：",size())
     print(f"更改为 {w}x{h}")
     wm_size(w,h)
 
