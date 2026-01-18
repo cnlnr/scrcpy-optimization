@@ -1,71 +1,62 @@
+# -*- coding: utf-8 -*-
 import subprocess
 import time
-import psutil
 import win32gui
-import win32process
 
-# -------------------------------
-# 启动 scrcpy
-# -------------------------------
-subprocess.Popen(["scrcpy-noconsole.vbs"], shell=True)
+# -------------------------- 核心配置（按需修改这1行即可） --------------------------
+SCRCPY_EXE_PATH = "scrcpy.exe"  # scrcpy.exe路径，不是当前目录就写绝对路径，例："D:/scrcpy/scrcpy.exe"
 
-# -------------------------------
-# 等待 scrcpy.exe 出现
-# -------------------------------
-pid = None
+# ------------------------------- 1. 静默启动 scrcpy.exe 无黑窗口 ✔️ -------------------------------
+subprocess.Popen(
+    [SCRCPY_EXE_PATH],
+    creationflags=subprocess.CREATE_NO_WINDOW  # 无黑窗启动，替代vbs脚本
+)
+
+# ------------------------------- 2. 精准查找scrcpy窗口句柄（无标题依赖、无PID、无进程） ✔️ -------------------------------
+def find_scrcpy_hwnd():
+    hwnd_target = None
+    def callback(hwnd, _):
+        nonlocal hwnd_target
+        # 核心匹配：scrcpy窗口固定类名 SDL_app + 窗口可见
+        if win32gui.IsWindowVisible(hwnd) and win32gui.GetClassName(hwnd) == "SDL_app":
+            hwnd_target = hwnd
+            return False  # 找到后立即终止遍历，提速
+        return True
+    win32gui.EnumWindows(callback, None)
+    return hwnd_target
+
+# ------------------------------- 3. 等待scrcpy窗口加载完成 -------------------------------
+hwnd = None
+print("正在等待scrcpy投屏窗口加载...")
 for _ in range(50):
-    for p in psutil.process_iter(["pid", "name"]):
-        if "scrcpy" in (p.info["name"] or "").lower():
-            pid = p.info["pid"]
-            break
-    if pid:
+    hwnd = find_scrcpy_hwnd()
+    if hwnd:
         break
-    time.sleep(3)
+    time.sleep(0.3)
 
-if not pid:
-    print("未找到 scrcpy.exe")
+if not hwnd:
+    print("❌ 错误：未检测到scrcpy投屏窗口，请检查是否正常启动scrcpy")
     exit()
+print(f"✅ 成功找到scrcpy窗口，窗口句柄: {hwnd}")
 
-# -------------------------------
-# 枚举顶层窗口按 PID
-# -------------------------------
-def find_hwnd_by_pid(pid):
-    hwnds = []
-    def enum_handler(hwnd, _):
-        if win32gui.IsWindowVisible(hwnd):
-            _, win_pid = win32process.GetWindowThreadProcessId(hwnd)
-            if win_pid == pid:
-                hwnds.append(hwnd)
-    win32gui.EnumWindows(enum_handler, None)
-    return hwnds
-
-hwnds = find_hwnd_by_pid(pid)
-print("找到的窗口句柄:", hwnds)
-
-if not hwnds:
-    exit()
-
-hwnd = hwnds[0]  # 取第一个窗口句柄
-
-# -------------------------------
-# 获取客户区尺寸
-# -------------------------------
+# ------------------------------- 4. 获取窗口【客户区】尺寸（投屏画面真实尺寸，无标题栏/边框） ✔️ -------------------------------
 def get_client_size(hwnd):
     left, top, right, bottom = win32gui.GetClientRect(hwnd)
-    width = right - left
-    height = bottom - top
-    return width, height
+    return right - left, bottom - top
 
-# -------------------------------
-# 监听客户区大小变化
-# -------------------------------
+# ------------------------------- 5. 实时监听窗口尺寸变化（核心逻辑，无任何报错） ✔️ -------------------------------
 last_size = None
-print("开始监听 scrcpy 窗口内部区域大小（拖动窗口试试）")
-while win32gui.IsWindow(hwnd):
-    size = get_client_size(hwnd)
-    if size != last_size:
-        print(f"客户区: {size[0]}x{size[1]} px")
-        last_size = size
-    time.sleep(0.1)
-
-print("scrcpy 窗口已关闭")
+print("✅ 开始监听投屏窗口画面尺寸变化（拖动窗口缩放即可触发）")
+try:
+    while win32gui.IsWindow(hwnd):  # 窗口存在就一直监听
+        current_size = get_client_size(hwnd)
+        if current_size != last_size:
+            print(f"📱 投屏画面尺寸更新: {current_size[0]} × {current_size[1]} 像素")
+            last_size = current_size
+        time.sleep(0.1)  # 兼顾实时性和CPU占用
+except KeyboardInterrupt:
+    print("\nℹ️ 用户手动终止监听")
+except Exception as e:
+    print(f"\n❌ 程序异常: {str(e)}")
+finally:
+    print("ℹ️ scrcpy窗口已关闭，监听结束")
