@@ -8,8 +8,8 @@ import psutil  # 仅用这个库获取PID，一行搞定
 # 配置路径
 SCRCPY_EXE_PATH = "scrcpy.exe"
 
-# 静默启动scrcpy
-subprocess.Popen([SCRCPY_EXE_PATH], creationflags=subprocess.CREATE_NO_WINDOW)
+# 启动 scrcpy
+subprocess.Popen([SCRCPY_EXE_PATH])
 
 # -------------------------- 核心：一行获取scrcpy.exe的PID (psutil极简写法) --------------------------
 def get_scrcpy_pid():
